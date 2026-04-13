@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-from playwright.sync_api import Page
+from playwright.async_api import Page
 
 from .shared import (
     check_logged_in,
@@ -18,10 +18,10 @@ CAPITALONE_URL = "https://myaccounts.capitalone.com/accountSummary"
 # ── Balances ────────────────────────────────────────────────────────────────
 
 
-def scrape_balances(page: Page) -> list[dict]:
-    page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
-    wait_for_navigation(page)
-    check_logged_in(page, "capitalone")
+async def scrape_balances(page: Page) -> list[dict]:
+    await page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
+    await wait_for_navigation(page)
+    await check_logged_in(page, "capitalone")
 
     balances: list[dict] = []
 
@@ -29,11 +29,11 @@ def scrape_balances(page: Page) -> list[dict]:
         "[data-testid*='account'], [class*='AccountCard'], "
         "[class*='account-tile'], [class*='account-summary']"
     )
-    count = _safe_count(account_cards)
+    count = await _safe_count(account_cards)
 
     for i in range(count):
         card = account_cards.nth(i)
-        text = _safe_text(card)
+        text = await _safe_text(card)
 
         balance_match = re.search(
             r"[Cc]urrent\s*[Bb]alance[\s:]*\$?([\d,]+\.?\d*)", text
@@ -54,7 +54,11 @@ def scrape_balances(page: Page) -> list[dict]:
         )
 
         name_match = re.match(r"([\w\s]+?)(?:Current|Available|\$|\d)", text)
-        card_name = name_match.group(1).strip() if name_match else "Capital One Credit Card"
+        card_name = (
+            name_match.group(1).strip()
+            if name_match
+            else "Capital One Credit Card"
+        )
 
         if current_balance is not None or available_credit is not None:
             balances.append({
@@ -68,8 +72,8 @@ def scrape_balances(page: Page) -> list[dict]:
 
     # Fallback: scan page text
     if not balances:
-        body_text = _safe_text(
-            page.locator("main, [role='main'], body").first()
+        body_text = await _safe_text(
+            page.locator("main, [role='main'], body").first
         )
         balance_match = re.search(
             r"[Bb]alance[\s:]*\$?([\d,]+\.\d{2})", body_text
@@ -79,7 +83,9 @@ def scrape_balances(page: Page) -> list[dict]:
                 "institution": "Capital One",
                 "account_name": "Capital One Credit Card",
                 "type": "credit",
-                "current_balance": parse_dollar_amount("$" + balance_match.group(1)) or 0,
+                "current_balance": (
+                    parse_dollar_amount("$" + balance_match.group(1)) or 0
+                ),
                 "available_balance": None,
                 "currency": "USD",
             })
@@ -90,19 +96,19 @@ def scrape_balances(page: Page) -> list[dict]:
 # ── Transactions ────────────────────────────────────────────────────────────
 
 
-def scrape_transactions(page: Page, days_back: int) -> list[dict]:
-    page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
-    wait_for_navigation(page)
-    check_logged_in(page, "capitalone")
+async def scrape_transactions(page: Page, days_back: int) -> list[dict]:
+    await page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
+    await wait_for_navigation(page)
+    await check_logged_in(page, "capitalone")
 
     # Click into credit card account
     card_link = page.locator(
         "a[href*='credit'], [data-testid*='credit-card'], a[class*='account']"
-    ).first()
+    ).first
     try:
-        if card_link.is_visible(timeout=5000):
-            card_link.click()
-            wait_for_navigation(page)
+        if await card_link.is_visible(timeout=5000):
+            await card_link.click()
+            await wait_for_navigation(page)
     except Exception:
         pass
 
@@ -110,11 +116,11 @@ def scrape_transactions(page: Page, days_back: int) -> list[dict]:
     activity_tab = page.locator(
         "a:has-text('Activity'), button:has-text('Activity'), "
         "a:has-text('Transactions'), [data-testid*='activity']"
-    ).first()
+    ).first
     try:
-        if activity_tab.is_visible(timeout=3000):
-            activity_tab.click()
-            wait_for_navigation(page)
+        if await activity_tab.is_visible(timeout=3000):
+            await activity_tab.click()
+            await wait_for_navigation(page)
     except Exception:
         pass
 
@@ -126,11 +132,11 @@ def scrape_transactions(page: Page, days_back: int) -> list[dict]:
         "[class*='TransactionRow'], [class*='activity-row'], "
         "tr[class*='transaction']"
     )
-    row_count = _safe_count(rows)
+    row_count = await _safe_count(rows)
 
     for i in range(row_count):
         row = rows.nth(i)
-        text = _safe_text(row)
+        text = await _safe_text(row)
 
         date_str = parse_transaction_date(text)
         if date_str:
@@ -142,7 +148,9 @@ def scrape_transactions(page: Page, days_back: int) -> list[dict]:
                 pass
 
         amount_match = re.search(r"-?\$[\d,]+\.?\d*", text)
-        amount = parse_dollar_amount(amount_match.group(0)) if amount_match else None
+        amount = (
+            parse_dollar_amount(amount_match.group(0)) if amount_match else None
+        )
 
         # Capital One sometimes shows category
         category = "Uncategorized"
@@ -170,24 +178,24 @@ def scrape_transactions(page: Page, days_back: int) -> list[dict]:
 # ── Credit Due Date ─────────────────────────────────────────────────────────
 
 
-def scrape_credit_due(page: Page) -> dict | None:
-    page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
-    wait_for_navigation(page)
-    check_logged_in(page, "capitalone")
+async def scrape_credit_due(page: Page) -> dict | None:
+    await page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
+    await wait_for_navigation(page)
+    await check_logged_in(page, "capitalone")
 
     # Click into credit card
     card_link = page.locator(
         "a[href*='credit'], [data-testid*='credit-card'], a[class*='account']"
-    ).first()
+    ).first
     try:
-        if card_link.is_visible(timeout=5000):
-            card_link.click()
-            wait_for_navigation(page)
+        if await card_link.is_visible(timeout=5000):
+            await card_link.click()
+            await wait_for_navigation(page)
     except Exception:
         pass
 
-    body_text = _safe_text(
-        page.locator("main, [role='main'], body").first()
+    body_text = await _safe_text(
+        page.locator("main, [role='main'], body").first
     )
 
     due_date_match = re.search(
@@ -195,17 +203,25 @@ def scrape_credit_due(page: Page) -> dict | None:
         r"([A-Za-z]+\s+\d{1,2},?\s*\d{4}|\d{1,2}/\d{1,2}/\d{4})",
         body_text,
     )
-    due_date = parse_transaction_date(due_date_match.group(1)) if due_date_match else None
+    due_date = (
+        parse_transaction_date(due_date_match.group(1))
+        if due_date_match
+        else None
+    )
 
     stmt_match = re.search(
         r"[Ss]tatement\s*[Bb]alance[\s:]*\$?([\d,]+\.?\d*)", body_text
     )
-    statement_balance = parse_dollar_amount("$" + stmt_match.group(1)) if stmt_match else None
+    statement_balance = (
+        parse_dollar_amount("$" + stmt_match.group(1)) if stmt_match else None
+    )
 
     min_match = re.search(
         r"[Mm]inimum\s*[Pp]ayment[\s:]*\$?([\d,]+\.?\d*)", body_text
     )
-    minimum_payment = parse_dollar_amount("$" + min_match.group(1)) if min_match else None
+    minimum_payment = (
+        parse_dollar_amount("$" + min_match.group(1)) if min_match else None
+    )
 
     if not due_date and statement_balance is None and minimum_payment is None:
         return None
@@ -222,89 +238,95 @@ def scrape_credit_due(page: Page) -> dict | None:
 # ── Pay ─────────────────────────────────────────────────────────────────────
 
 
-def pay(page: Page, amount: str | float, from_bank: str) -> dict:
-    page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
-    wait_for_navigation(page)
-    check_logged_in(page, "capitalone")
+async def pay(page: Page, amount: str | float, from_bank: str) -> dict:
+    await page.goto(CAPITALONE_URL, wait_until="domcontentloaded")
+    await wait_for_navigation(page)
+    await check_logged_in(page, "capitalone")
 
     # Navigate to credit card
     card_link = page.locator(
         "a[href*='credit'], [data-testid*='credit-card']"
-    ).first()
-    card_link.click(timeout=10000)
-    wait_for_navigation(page)
+    ).first
+    await card_link.click(timeout=10000)
+    await wait_for_navigation(page)
 
     # Click Make Payment
     pay_btn = page.locator(
-        "button:has-text('Make a Payment'), a:has-text('Make a Payment'), "
+        "button:has-text('Make a Payment'), "
+        "a:has-text('Make a Payment'), "
         "button:has-text('Pay')"
-    ).first()
-    pay_btn.click(timeout=10000)
-    wait_for_navigation(page)
+    ).first
+    await pay_btn.click(timeout=10000)
+    await wait_for_navigation(page)
 
     # Select payment source if visible
     from_select = page.locator(
-        "select[id*='from'], select[name*='bank'], [data-testid*='payment-source']"
-    ).first()
+        "select[id*='from'], select[name*='bank'], "
+        "[data-testid*='payment-source']"
+    ).first
     try:
-        if from_select.is_visible(timeout=3000):
-            from_options = from_select.locator("option").all_text_contents()
+        if await from_select.is_visible(timeout=3000):
+            from_options = (
+                await from_select.locator("option").all_text_contents()
+            )
             from_match = next(
-                (o for o in from_options if re.search(from_bank, o, re.I)), None
+                (o for o in from_options if re.search(from_bank, o, re.I)),
+                None,
             )
             if from_match:
-                from_select.select_option(label=from_match)
+                await from_select.select_option(label=from_match)
     except Exception:
         pass
 
     # Select amount type
     if amount == "statement":
-        page.locator(
+        await page.locator(
             "input[value*='statement'], label:has-text('Statement'), "
             "button:has-text('Statement')"
-        ).first().click()
+        ).first.click()
     elif amount == "minimum":
-        page.locator(
+        await page.locator(
             "input[value*='minimum'], label:has-text('Minimum'), "
             "button:has-text('Minimum')"
-        ).first().click()
+        ).first.click()
     else:
-        page.locator(
+        await page.locator(
             "input[value*='other'], label:has-text('Other'), "
             "button:has-text('Other')"
-        ).first().click()
+        ).first.click()
         amt = float(amount)
-        page.locator(
-            "input[id*='amount'], input[name*='amount'], input[type='number']"
-        ).first().fill(f"{amt:.2f}")
+        await page.locator(
+            "input[id*='amount'], input[name*='amount'], "
+            "input[type='number']"
+        ).first.fill(f"{amt:.2f}")
 
     # Submit / Review
     submit_btn = page.locator(
         "button:has-text('Review'), button:has-text('Continue'), "
         "button[type='submit']"
-    ).first()
-    submit_btn.click()
-    wait_for_navigation(page)
+    ).first
+    await submit_btn.click()
+    await wait_for_navigation(page)
 
     # Read actual amount
-    amount_text = _safe_text(
-        page.locator("[class*='amount'], [data-testid*='amount']").first()
+    amount_text = await _safe_text(
+        page.locator("[class*='amount'], [data-testid*='amount']").first
     )
     paid_amount = _parse_paid_amount(amount_text, amount)
 
     # Confirm
     confirm_btn = page.locator(
         "button:has-text('Submit'), button:has-text('Confirm')"
-    ).first()
+    ).first
     try:
-        if confirm_btn.is_visible(timeout=5000):
-            confirm_btn.click()
-            wait_for_navigation(page)
+        if await confirm_btn.is_visible(timeout=5000):
+            await confirm_btn.click()
+            await wait_for_navigation(page)
     except Exception:
         pass
 
-    confirm_text = _safe_text(
-        page.locator("[class*='confirm'], [data-testid*='confirm']").first()
+    confirm_text = await _safe_text(
+        page.locator("[class*='confirm'], [data-testid*='confirm']").first
     )
     conf_match = re.search(r"\b[A-Z0-9]{6,}\b", confirm_text)
 
@@ -318,16 +340,16 @@ def pay(page: Page, amount: str | float, from_bank: str) -> dict:
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def _safe_count(locator) -> int:
+async def _safe_count(locator) -> int:
     try:
-        return locator.count()
+        return await locator.count()
     except Exception:
         return 0
 
 
-def _safe_text(locator) -> str:
+async def _safe_text(locator) -> str:
     try:
-        return locator.text_content() or ""
+        return await locator.text_content() or ""
     except Exception:
         return ""
 

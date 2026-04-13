@@ -27,7 +27,9 @@ def _bank_error(bank: str, e: Exception) -> dict:
 def _resolve_banks(bank: str | None) -> list[str]:
     if bank:
         if bank not in ALL_BANKS:
-            raise ValueError(f"Unknown bank: {bank}. Choose from: {', '.join(ALL_BANKS)}")
+            raise ValueError(
+                f"Unknown bank: {bank}. Choose from: {', '.join(ALL_BANKS)}"
+            )
         return [bank]
     return list(ALL_BANKS)
 
@@ -49,17 +51,19 @@ _SCRAPE_TRANSACTIONS = {
 
 
 @mcp.tool()
-def get_balances(bank: str | None = None) -> str:
-    """Get account balances across all banks (SoFi, BofA, Capital One) via browser scraping.
-    Optionally filter to a single bank: 'sofi', 'bofa', or 'capitalone'."""
+async def get_balances(bank: str | None = None) -> str:
+    """Get account balances across all banks (SoFi, BofA, Capital One).
+
+    Optionally filter to a single bank: 'sofi', 'bofa', or 'capitalone'.
+    """
     banks = _resolve_banks(bank)
     results: list[dict] = []
     errors: list[dict] = []
 
     for b in banks:
         try:
-            page = get_bank_page(b)
-            results.extend(_SCRAPE_BALANCES[b](page))
+            page = await get_bank_page(b)
+            results.extend(await _SCRAPE_BALANCES[b](page))
         except Exception as e:
             errors.append(_bank_error(b, e))
 
@@ -67,7 +71,7 @@ def get_balances(bank: str | None = None) -> str:
 
 
 @mcp.tool()
-def get_transactions(
+async def get_transactions(
     bank: str | None = None,
     days_back: int = 30,
     account_name: str | None = None,
@@ -82,8 +86,8 @@ def get_transactions(
 
     for b in banks:
         try:
-            page = get_bank_page(b)
-            results.extend(_SCRAPE_TRANSACTIONS[b](page, days_back))
+            page = await get_bank_page(b)
+            results.extend(await _SCRAPE_TRANSACTIONS[b](page, days_back))
         except Exception as e:
             errors.append(_bank_error(b, e))
 
@@ -96,8 +100,11 @@ def get_transactions(
 
 
 @mcp.tool()
-def get_credit_due() -> str:
-    """Get credit card due dates, statement balances, and minimum payments (BofA + Capital One)."""
+async def get_credit_due() -> str:
+    """Get credit card due dates, statement balances, and minimum payments.
+
+    Scrapes BofA and Capital One.
+    """
     results: list[dict] = []
     errors: list[dict] = []
 
@@ -107,8 +114,8 @@ def get_credit_due() -> str:
     ]
     for b, scraper in credit_scrapers:
         try:
-            page = get_bank_page(b)
-            due = scraper(page)
+            page = await get_bank_page(b)
+            due = await scraper(page)
             if due:
                 results.append(due)
         except Exception as e:
@@ -118,11 +125,16 @@ def get_credit_due() -> str:
 
 
 @mcp.tool()
-def spending_summary(days_back: int = 30, account_name: str | None = None) -> str:
+async def spending_summary(
+    days_back: int = 30, account_name: str | None = None
+) -> str:
     """Compute spending summary from scraped transactions.
-    Categories may be limited since bank UIs don't always categorize transactions."""
-    # Reuse transaction scraping
-    raw = json.loads(get_transactions(days_back=days_back, account_name=account_name))
+
+    Categories may be limited since bank UIs don't always categorize.
+    """
+    raw = json.loads(
+        await get_transactions(days_back=days_back, account_name=account_name)
+    )
     transactions = raw["data"]
     errors = raw["errors"]
 
@@ -131,10 +143,12 @@ def spending_summary(days_back: int = 30, account_name: str | None = None) -> st
 
 
 @mcp.tool()
-def get_recurring() -> str:
-    """Detect recurring charges by analyzing 90 days of transaction history.
-    Uses heuristic pattern matching (repeated merchant + similar amount + regular interval)."""
-    raw = json.loads(get_transactions(days_back=90))
+async def get_recurring() -> str:
+    """Detect recurring charges by analyzing 90 days of transactions.
+
+    Uses heuristic pattern matching on merchant + amount + interval.
+    """
+    raw = json.loads(await get_transactions(days_back=90))
     transactions = raw["data"]
     errors = raw["errors"]
 
@@ -146,12 +160,16 @@ def get_recurring() -> str:
 
 
 @mcp.tool()
-def sofi_transfer(to_account: str, amount: float, memo: str | None = None) -> str:
+async def sofi_transfer(
+    to_account: str, amount: float, memo: str | None = None
+) -> str:
     """Transfer money from SoFi checking account.
-    to_account: 'savings' or an external account name. Requires active browser session."""
+
+    to_account: 'savings' or an external account name.
+    """
     try:
-        page = get_bank_page("sofi")
-        result = sofi.transfer(page, to_account, amount, memo)
+        page = await get_bank_page("sofi")
+        result = await sofi.transfer(page, to_account, amount, memo)
         return json.dumps(result, indent=2)
     except Exception as e:
         expired = isinstance(e, BankSessionExpiredError)
@@ -159,12 +177,13 @@ def sofi_transfer(to_account: str, amount: float, memo: str | None = None) -> st
 
 
 @mcp.tool()
-def bofa_transfer(from_account: str, to_account: str, amount: float) -> str:
-    """Transfer money between Bank of America accounts.
-    Requires active browser session."""
+async def bofa_transfer(
+    from_account: str, to_account: str, amount: float
+) -> str:
+    """Transfer money between Bank of America accounts."""
     try:
-        page = get_bank_page("bofa")
-        result = bofa.transfer(page, from_account, to_account, amount)
+        page = await get_bank_page("bofa")
+        result = await bofa.transfer(page, from_account, to_account, amount)
         return json.dumps(result, indent=2)
     except Exception as e:
         expired = isinstance(e, BankSessionExpiredError)
@@ -172,13 +191,16 @@ def bofa_transfer(from_account: str, to_account: str, amount: float) -> str:
 
 
 @mcp.tool()
-def bofa_pay_credit_card(amount: str = "statement", from_account: str = "checking") -> str:
+async def bofa_pay_credit_card(
+    amount: str = "statement", from_account: str = "checking"
+) -> str:
     """Pay Bank of America credit card from BofA checking.
+
     amount: 'statement', 'minimum', or a dollar amount like '50.00'.
-    Requires active browser session."""
+    """
     try:
-        page = get_bank_page("bofa")
-        result = bofa.pay_credit_card(page, amount, from_account)
+        page = await get_bank_page("bofa")
+        result = await bofa.pay_credit_card(page, amount, from_account)
         return json.dumps(result, indent=2)
     except Exception as e:
         expired = isinstance(e, BankSessionExpiredError)
@@ -186,13 +208,16 @@ def bofa_pay_credit_card(amount: str = "statement", from_account: str = "checkin
 
 
 @mcp.tool()
-def capitalone_pay(amount: str = "statement", from_bank: str = "external") -> str:
+async def capitalone_pay(
+    amount: str = "statement", from_bank: str = "external"
+) -> str:
     """Pay Capital One credit card.
+
     amount: 'statement', 'minimum', or a dollar amount like '50.00'.
-    Requires active browser session."""
+    """
     try:
-        page = get_bank_page("capitalone")
-        result = capitalone.pay(page, amount, from_bank)
+        page = await get_bank_page("capitalone")
+        result = await capitalone.pay(page, amount, from_bank)
         return json.dumps(result, indent=2)
     except Exception as e:
         expired = isinstance(e, BankSessionExpiredError)
@@ -233,7 +258,6 @@ def _compute_summary(transactions: list[dict]) -> dict:
 def _detect_recurring(transactions: list[dict]) -> list[dict]:
     from datetime import datetime
 
-    # Group by normalized merchant name
     by_merchant: dict[str, list[dict]] = {}
     for tx in transactions:
         if tx.get("pending"):
@@ -249,7 +273,6 @@ def _detect_recurring(transactions: list[dict]) -> list[dict]:
         if len(txns) < 2:
             continue
 
-        # Check amounts are similar (within 10%)
         amounts = [t["amount"] for t in txns]
         avg_amount = sum(amounts) / len(amounts)
         if avg_amount == 0:
@@ -257,11 +280,12 @@ def _detect_recurring(transactions: list[dict]) -> list[dict]:
         if not all(abs(a - avg_amount) / avg_amount < 0.1 for a in amounts):
             continue
 
-        # Check intervals are roughly regular
         dates = []
         for t in txns:
             try:
-                dates.append(datetime.strptime(t["date"], "%Y-%m-%d").timestamp())
+                dates.append(
+                    datetime.strptime(t["date"], "%Y-%m-%d").timestamp()
+                )
             except (ValueError, KeyError):
                 pass
         dates.sort()
@@ -269,7 +293,8 @@ def _detect_recurring(transactions: list[dict]) -> list[dict]:
             continue
 
         intervals = [
-            (dates[i] - dates[i - 1]) / 86400 for i in range(1, len(dates))
+            (dates[i] - dates[i - 1]) / 86400
+            for i in range(1, len(dates))
         ]
         avg_interval = sum(intervals) / len(intervals)
 
