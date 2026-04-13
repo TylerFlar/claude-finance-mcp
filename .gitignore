@@ -1,7 +1,7 @@
-node_modules/
-dist/
-*.tsbuildinfo
+__pycache__/
+*.pyc
+.venv/
 .env
 
-# Browser/auth data (host stdio mode)
+# Browser profiles (sessions/cookies)
 data/

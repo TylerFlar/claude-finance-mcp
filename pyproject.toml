@@ -1,0 +1,17 @@
+[project]
+name = "finance-mcp"
+version = "0.1.0"
+description = "Finance MCP server - scrapes BofA, SoFi, and Capital One via Camoufox"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "mcp>=1.0.0",
+    "camoufox>=0.4",
+    "pyotp>=2.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
