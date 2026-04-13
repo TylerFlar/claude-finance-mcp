@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from banks import ALL_BANKS
+from banks import ALL_BANKS, bofa, capitalone, sofi
 from banks.shared import BankSessionExpiredError, get_bank_page
-from banks import sofi, bofa, capitalone
 
 mcp = FastMCP("finance")
 
@@ -75,7 +73,9 @@ def get_transactions(
     account_name: str | None = None,
 ) -> str:
     """List recent transactions across all banks via browser scraping.
-    Optionally filter by bank ('sofi', 'bofa', 'capitalone'), days of history, or account name (regex)."""
+
+    Optionally filter by bank, days of history, or account name (regex).
+    """
     banks = _resolve_banks(bank)
     results: list[dict] = []
     errors: list[dict] = []
@@ -97,11 +97,15 @@ def get_transactions(
 
 @mcp.tool()
 def get_credit_due() -> str:
-    """Get credit card payment due dates, statement balances, and minimum payments from BofA and Capital One."""
+    """Get credit card due dates, statement balances, and minimum payments (BofA + Capital One)."""
     results: list[dict] = []
     errors: list[dict] = []
 
-    for b, scraper in [("bofa", bofa.scrape_credit_due), ("capitalone", capitalone.scrape_credit_due)]:
+    credit_scrapers = [
+        ("bofa", bofa.scrape_credit_due),
+        ("capitalone", capitalone.scrape_credit_due),
+    ]
+    for b, scraper in credit_scrapers:
         try:
             page = get_bank_page(b)
             due = scraper(page)
@@ -150,7 +154,8 @@ def sofi_transfer(to_account: str, amount: float, memo: str | None = None) -> st
         result = sofi.transfer(page, to_account, amount, memo)
         return json.dumps(result, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e), "sessionExpired": isinstance(e, BankSessionExpiredError)})
+        expired = isinstance(e, BankSessionExpiredError)
+        return json.dumps({"error": str(e), "sessionExpired": expired})
 
 
 @mcp.tool()
@@ -162,33 +167,36 @@ def bofa_transfer(from_account: str, to_account: str, amount: float) -> str:
         result = bofa.transfer(page, from_account, to_account, amount)
         return json.dumps(result, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e), "sessionExpired": isinstance(e, BankSessionExpiredError)})
+        expired = isinstance(e, BankSessionExpiredError)
+        return json.dumps({"error": str(e), "sessionExpired": expired})
 
 
 @mcp.tool()
 def bofa_pay_credit_card(amount: str = "statement", from_account: str = "checking") -> str:
     """Pay Bank of America credit card from BofA checking.
-    amount: 'statement' for full balance, 'minimum' for minimum due, or a dollar amount like '50.00'.
+    amount: 'statement', 'minimum', or a dollar amount like '50.00'.
     Requires active browser session."""
     try:
         page = get_bank_page("bofa")
         result = bofa.pay_credit_card(page, amount, from_account)
         return json.dumps(result, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e), "sessionExpired": isinstance(e, BankSessionExpiredError)})
+        expired = isinstance(e, BankSessionExpiredError)
+        return json.dumps({"error": str(e), "sessionExpired": expired})
 
 
 @mcp.tool()
 def capitalone_pay(amount: str = "statement", from_bank: str = "external") -> str:
     """Pay Capital One credit card.
-    amount: 'statement' for full balance, 'minimum' for minimum due, or a dollar amount like '50.00'.
+    amount: 'statement', 'minimum', or a dollar amount like '50.00'.
     Requires active browser session."""
     try:
         page = get_bank_page("capitalone")
         result = capitalone.pay(page, amount, from_bank)
         return json.dumps(result, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e), "sessionExpired": isinstance(e, BankSessionExpiredError)})
+        expired = isinstance(e, BankSessionExpiredError)
+        return json.dumps({"error": str(e), "sessionExpired": expired})
 
 
 # ── Aggregate computation ──────────────────────────────────────────────────

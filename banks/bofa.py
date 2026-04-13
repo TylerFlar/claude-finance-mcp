@@ -7,7 +7,6 @@ from playwright.sync_api import Page
 
 from .shared import (
     BankSessionExpiredError,
-    check_logged_in,
     parse_dollar_amount,
     parse_transaction_date,
     wait_for_navigation,

@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from camoufox.sync_api import Camoufox
+
 from banks.shared import get_bank_config
 
 
@@ -44,7 +45,9 @@ BANKS: dict[str, BankDef] = {
         totp_env="SOFI_TOTP_SECRET",
         username_selector="input[name='email'], input[type='email'], #email",
         password_selector="input[name='password'], input[type='password'], #password",
-        submit_selector="button[type='submit'], button:has-text('Log in'), button:has-text('Sign in')",
+        submit_selector=(
+            "button[type='submit'], button:has-text('Log in'), button:has-text('Sign in')"
+        ),
         success_indicators=["banking", "dashboard", "account"],
     ),
     "bofa": BankDef(
