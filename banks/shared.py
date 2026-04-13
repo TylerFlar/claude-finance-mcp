@@ -261,9 +261,13 @@ async def check_logged_in(page: Page, bank: str) -> None:
 async def wait_for_navigation(
     page: Page, timeout_ms: int = 30000
 ) -> None:
-    """Wait for page to settle after navigation."""
+    """Wait for page to settle after navigation (including SPA rendering)."""
     await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    await page.wait_for_timeout(1000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception:
+        pass  # networkidle can timeout on long-polling pages
+    await page.wait_for_timeout(2000)
 
 
 def _log(msg: str) -> None:
