@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
-RUN npx playwright install chromium --with-deps
+RUN npx playwright install firefox --with-deps
 
 ENV MCP_TRANSPORT=http
 ENV MCP_PORT=3100

@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { firefox } from "playwright";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -36,9 +36,9 @@ const BANKS: Record<string, BankDef> = {
     usernameEnv: "BOFA_USERNAME",
     passwordEnv: "BOFA_PASSWORD",
     totpEnv: undefined,  // BofA uses SMS 2FA, not TOTP
-    usernameSelector: "input#onlineId1, input[name='onlineId']",
-    passwordSelector: "input#passcode1, input[name='passcode']",
-    submitSelector: "input#signIn, button#signIn, input[type='submit']",
+    usernameSelector: "input#oid",
+    passwordSelector: "input#pass",
+    submitSelector: "button#secure-signin-submit",
     successIndicator: "accounts-overview,account-summary,myaccounts",
   },
   capitalone: {
@@ -88,13 +88,13 @@ async function main() {
 
   fs.mkdirSync(sessionDir, { recursive: true });
 
-  const browser = await chromium.launch({
+  const browser = await firefox.launch({
     headless,
-    args: ["--disable-webgl", "--disable-software-rasterizer", "--no-sandbox"],
+    args: ["--disable-webgl", "--disable-software-rasterizer"],
   });
 
   const context = await browser.newContext({
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
     viewport: { width: 1920, height: 1080 },
     locale: "en-US",
   });
@@ -129,6 +129,17 @@ async function main() {
 
   if (!isLoggedIn) {
     console.log("\n2FA may be required.");
+    console.log("Current URL:", url);
+
+    // BofA-specific: select "Text message" radio and click "Next" to send the code
+    const bofaTextRadio = page.locator("#authcodeTextReceive");
+    if (await bofaTextRadio.isVisible({ timeout: 3000 }).catch(() => false)) {
+      console.log("BofA: Selecting 'Text message' delivery and requesting code...");
+      await bofaTextRadio.check();
+      await page.locator("#ah-authcode-select-continue-btn").click();
+      await page.waitForTimeout(3000);
+      console.log("Code sent! Check your phone.");
+    }
 
     if (totpSecret) {
       console.log("Generating TOTP code...");
@@ -147,12 +158,28 @@ async function main() {
       }
     } else {
       const code = await ask("Enter your 2FA code: ");
-      const codeInput = page.locator("input[name*='code'], input[name*='otp'], input[type='tel'], input[placeholder*='code']").first();
-      if (await codeInput.isVisible({ timeout: 5000 })) {
+      // Try BofA-specific input first, then generic selectors
+      let codeInput = page.locator("#ahAuthcodeValidateOTP");
+      if (!await codeInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+        codeInput = page.locator("input[name*='code'], input[name*='otp'], input[name*='OTP'], input[type='tel'], input[placeholder*='code']").first();
+      }
+      if (await codeInput.isVisible({ timeout: 10000 })) {
         await codeInput.fill(code);
-        const submit2FA = page.locator("button[type='submit'], button:has-text('Continue'), button:has-text('Submit'), button:has-text('Verify')").first();
+        // Also check "Remember this device" if available
+        const rememberDevice = page.locator("#rememberDevice");
+        if (await rememberDevice.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await rememberDevice.check();
+        }
+        const submit2FA = page.locator("button[type='submit'], button:has-text('Continue'), button:has-text('Submit'), button:has-text('Verify'), button:has-text('Next'), #ah-authcode-validate-continue-btn").first();
         await submit2FA.click();
-        await page.waitForTimeout(3000);
+        await page.waitForTimeout(5000);
+      } else {
+        console.log("Could not find code input. Page URL:", page.url());
+        console.log("Visible inputs:");
+        for (const inp of await page.locator("input").all()) {
+          const a = await inp.evaluate((el: HTMLInputElement) => ({ id: el.id, name: el.name, type: el.type, visible: el.offsetParent !== null }));
+          if (a.visible) console.log("  ", JSON.stringify(a));
+        }
       }
     }
   }
