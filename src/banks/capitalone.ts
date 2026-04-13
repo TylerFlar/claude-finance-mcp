@@ -1,11 +1,70 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getBankPage, saveBankSession, waitForNavigation } from "./shared.js";
+import { scrapeCapitalOneBalances, scrapeCapitalOneTransactions, scrapeCapitalOneCreditDueDate } from "./scrapers/index.js";
 
 const BANK = "capitalone";
 const CAPITALONE_URL = "https://myaccounts.capitalone.com/accountSummary";
 
 export function registerCapitalOneTools(server: McpServer): void {
+  // ─── capitalone_balances ────────────────────────────────────────────────────
+
+  server.tool(
+    "capitalone_balances",
+    "Get Capital One credit card balance via browser scraping.",
+    {},
+    async () => {
+      try {
+        const page = await getBankPage(BANK);
+        const balances = await scrapeCapitalOneBalances(page);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(balances, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── capitalone_transactions ────────────────────────────────────────────────
+
+  server.tool(
+    "capitalone_transactions",
+    "List recent Capital One transactions via browser scraping.",
+    {
+      days_back: z.number().positive().default(30).describe("Number of days of history (default 30)"),
+    },
+    async ({ days_back }) => {
+      try {
+        const page = await getBankPage(BANK);
+        const txns = await scrapeCapitalOneTransactions(page, days_back);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(txns, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── capitalone_credit_due_date ─────────────────────────────────────────────
+
+  server.tool(
+    "capitalone_credit_due_date",
+    "Get Capital One credit card payment due date, statement balance, and minimum payment.",
+    {},
+    async () => {
+      try {
+        const page = await getBankPage(BANK);
+        const dueDate = await scrapeCapitalOneCreditDueDate(page);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(dueDate, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── capitalone_pay ─────────────────────────────────────────────────────────
+
   server.tool(
     "capitalone_pay",
     "Pay Capital One credit card. Requires browser session — run setup:bank capitalone first.",

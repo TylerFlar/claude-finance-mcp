@@ -4,6 +4,55 @@ import * as path from "path";
 import * as os from "os";
 import type { BankConfig } from "../types.js";
 
+export class BankSessionExpiredError extends Error {
+  constructor(public bank: string) {
+    super(`${bank} session expired. Run setup:bank ${bank} to re-login.`);
+    this.name = "BankSessionExpiredError";
+  }
+}
+
+export async function ensureLoggedIn(page: Page, bank: string): Promise<void> {
+  const url = page.url();
+  if (url.includes("login") || url.includes("signin")) {
+    throw new BankSessionExpiredError(bank);
+  }
+}
+
+export function parseDollarAmount(text: string): number | null {
+  const match = text.match(/-?\$?([\d,]+\.?\d*)/);
+  if (!match) return null;
+  const value = parseFloat(match[1].replace(/,/g, ""));
+  if (isNaN(value)) return null;
+  return text.includes("-") ? -value : value;
+}
+
+export function parseTransactionDate(text: string): string | null {
+  const now = new Date();
+  // Try ISO-ish: 2026-04-10
+  let m = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // Try MM/DD/YYYY
+  m = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+  // Try Mon DD, YYYY (e.g. "Apr 10, 2026")
+  const months: Record<string, string> = {
+    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  };
+  m = text.match(/([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{4})?/);
+  if (m) {
+    const mon = months[m[1].toLowerCase().slice(0, 3)];
+    if (mon) {
+      const year = m[3] || String(now.getFullYear());
+      return `${year}-${mon}-${m[2].padStart(2, "0")}`;
+    }
+  }
+  // Try MM/DD (current year)
+  m = text.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (m) return `${now.getFullYear()}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+  return null;
+}
+
 const DEFAULT_BROWSER_DIR = path.join(os.homedir(), ".config", "claude-finance-mcp");
 
 interface BankSession {

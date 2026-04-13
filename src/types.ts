@@ -46,10 +46,10 @@ export interface RecurringCharge {
   account_name: string;
 }
 
-export interface PlaidTokenEntry {
-  access_token: string;
-  institution: string;
-  item_id: string;
+export interface BankScrapeError {
+  bank: string;
+  error: string;
+  sessionExpired: boolean;
 }
 
 export interface TransferResult {

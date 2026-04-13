@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getBankPage, saveBankSession, waitForNavigation } from "./shared.js";
+import { scrapeBofaBalances, scrapeBofaTransactions, scrapeBofaCreditDueDate } from "./scrapers/index.js";
 
 const BANK = "bofa";
 const BOFA_URL = "https://www.bankofamerica.com/";
@@ -13,6 +14,62 @@ function checkLoggedIn(page: { url: () => string }): boolean {
 }
 
 export function registerBofaTools(server: McpServer): void {
+  // ─── bofa_balances ──────────────────────────────────────────────────────────
+
+  server.tool(
+    "bofa_balances",
+    "Get Bank of America checking and credit card balances via browser scraping.",
+    {},
+    async () => {
+      try {
+        const page = await getBankPage(BANK);
+        const balances = await scrapeBofaBalances(page);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(balances, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── bofa_transactions ──────────────────────────────────────────────────────
+
+  server.tool(
+    "bofa_transactions",
+    "List recent Bank of America transactions via browser scraping.",
+    {
+      days_back: z.number().positive().default(30).describe("Number of days of history (default 30)"),
+    },
+    async ({ days_back }) => {
+      try {
+        const page = await getBankPage(BANK);
+        const txns = await scrapeBofaTransactions(page, days_back);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(txns, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── bofa_credit_due_date ───────────────────────────────────────────────────
+
+  server.tool(
+    "bofa_credit_due_date",
+    "Get BofA credit card payment due date, statement balance, and minimum payment.",
+    {},
+    async () => {
+      try {
+        const page = await getBankPage(BANK);
+        const dueDate = await scrapeBofaCreditDueDate(page);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(dueDate, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
   // ─── bofa_transfer ───────────────────────────────────────────────────────────
 
   server.tool(

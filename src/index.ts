@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerPlaidTools } from "./plaid/tools.js";
 import { registerPaypalTools } from "./paypal/tools.js";
+import { registerAggregateTools } from "./banks/aggregate-tools.js";
 import { registerSofiTools } from "./banks/sofi.js";
 import { registerBofaTools } from "./banks/bofa.js";
 import { registerCapitalOneTools } from "./banks/capitalone.js";
@@ -8,7 +8,7 @@ import { registerCapitalOneTools } from "./banks/capitalone.js";
 const server = new McpServer({ name: "finance", version: "1.0.0" });
 
 // Register all tools
-registerPlaidTools(server);
+registerAggregateTools(server);
 registerPaypalTools(server);
 registerSofiTools(server);
 registerBofaTools(server);

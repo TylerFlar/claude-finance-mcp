@@ -1,11 +1,52 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getBankPage, saveBankSession, waitForNavigation } from "./shared.js";
+import { scrapeSofiBalances, scrapeSofiTransactions } from "./scrapers/index.js";
 
 const BANK = "sofi";
 const SOFI_URL = "https://www.sofi.com/wealth/app/banking";
 
 export function registerSofiTools(server: McpServer): void {
+  // ─── sofi_balances ────────────────────────────────────────────────────────────
+
+  server.tool(
+    "sofi_balances",
+    "Get SoFi checking and savings account balances via browser scraping.",
+    {},
+    async () => {
+      try {
+        const page = await getBankPage(BANK);
+        const balances = await scrapeSofiBalances(page);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(balances, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── sofi_transactions ────────────────────────────────────────────────────────
+
+  server.tool(
+    "sofi_transactions",
+    "List recent SoFi transactions via browser scraping.",
+    {
+      days_back: z.number().positive().default(30).describe("Number of days of history (default 30)"),
+    },
+    async ({ days_back }) => {
+      try {
+        const page = await getBankPage(BANK);
+        const txns = await scrapeSofiTransactions(page, days_back);
+        await saveBankSession(BANK);
+        return { content: [{ type: "text", text: JSON.stringify(txns, null, 2) }], isError: false };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── sofi_transfer ──────────────────────────────────────────────────────────
+
   server.tool(
     "sofi_transfer",
     "Transfer money from SoFi checking account. Requires browser session — run setup:bank sofi first.",
