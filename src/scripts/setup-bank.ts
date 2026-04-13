@@ -11,7 +11,7 @@ interface BankDef {
   loginUrl: string;
   usernameEnv: string;
   passwordEnv: string;
-  totpEnv: string;
+  totpEnv?: string;
   usernameSelector: string;
   passwordSelector: string;
   submitSelector: string;
@@ -35,7 +35,7 @@ const BANKS: Record<string, BankDef> = {
     loginUrl: "https://www.bankofamerica.com/",
     usernameEnv: "BOFA_USERNAME",
     passwordEnv: "BOFA_PASSWORD",
-    totpEnv: "BOFA_TOTP_SECRET",
+    totpEnv: undefined,  // BofA uses SMS 2FA, not TOTP
     usernameSelector: "input#onlineId1, input[name='onlineId']",
     passwordSelector: "input#passcode1, input[name='passcode']",
     submitSelector: "input#signIn, button#signIn, input[type='submit']",
@@ -46,7 +46,7 @@ const BANKS: Record<string, BankDef> = {
     loginUrl: "https://verified.capitalone.com/auth/signin",
     usernameEnv: "CAPITALONE_USERNAME",
     passwordEnv: "CAPITALONE_PASSWORD",
-    totpEnv: "CAPITALONE_TOTP_SECRET",
+    totpEnv: undefined,  // Capital One uses SMS/push 2FA, not TOTP
     usernameSelector: "input#userId, input[name='userId'], input[type='text']",
     passwordSelector: "input#password, input[name='password'], input[type='password']",
     submitSelector: "button[type='submit'], button:has-text('Sign In')",
@@ -75,7 +75,7 @@ async function main() {
 
   const username = process.env[bank.usernameEnv];
   const password = process.env[bank.passwordEnv];
-  const totpSecret = process.env[bank.totpEnv];
+  const totpSecret = bank.totpEnv ? process.env[bank.totpEnv] : undefined;
 
   if (!username || !password) {
     console.error(`Error: ${bank.usernameEnv} and ${bank.passwordEnv} must be set.`);
