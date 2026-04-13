@@ -1,6 +1,6 @@
 # @tasque/finance-mcp
 
-Unified finance MCP — bank accounts, credit cards, and PayPal. All bank operations use Playwright browser automation.
+Unified finance MCP — bank accounts and credit cards. All operations use Playwright browser automation.
 
 ## Tools
 
@@ -36,22 +36,10 @@ Unified finance MCP — bank accounts, credit cards, and PayPal. All bank operat
 | `bofa_pay_credit_card` | Pay BofA credit card |
 | `capitalone_pay` | Pay Capital One credit card |
 
-### PayPal (read + write — REST API)
-
-| Tool | Description |
-|------|-------------|
-| `paypal_balance` | Current PayPal balance |
-| `paypal_transactions` | Recent PayPal transactions |
-| `paypal_commission_income` | Incoming payments (commission tracking) |
-| `paypal_send` | Send money via PayPal |
-
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PAYPAL_CLIENT_ID` | Yes | PayPal REST API client ID |
-| `PAYPAL_SECRET` | Yes | PayPal REST API secret |
-| `PAYPAL_ENV` | No | sandbox/live (default: live) |
 | `SOFI_USERNAME` | For SoFi | SoFi login |
 | `SOFI_PASSWORD` | For SoFi | SoFi password |
 | `BOFA_USERNAME` | For BofA | BofA login |
@@ -70,9 +58,6 @@ node dist/scripts/setup-bank.js bofa
 node dist/scripts/setup-bank.js capitalone
 ```
 Sessions are stored as cookies in `BROWSER_DATA_DIR`. Re-run setup when sessions expire.
-
-### PayPal
-Set PAYPAL_CLIENT_ID and PAYPAL_SECRET env vars. No browser flow needed.
 
 ## Development
 
