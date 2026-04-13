@@ -48,7 +48,7 @@ BANKS: dict[str, BankDef] = {
         submit_selector=(
             "button[type='submit'], button:has-text('Log in'), button:has-text('Sign in')"
         ),
-        success_indicators=["banking", "dashboard", "account"],
+        success_indicators=["banking", "dashboard", "account", "wealth", "mysofi"],
     ),
     "bofa": BankDef(
         name="Bank of America",
@@ -76,7 +76,14 @@ BANKS: dict[str, BankDef] = {
 
 
 def _is_logged_in(url: str, bank: BankDef) -> bool:
-    return any(s in url for s in bank.success_indicators)
+    # Positive: URL contains a known post-login indicator
+    if any(s in url for s in bank.success_indicators):
+        return True
+    # Negative: no longer on login/signin page (and not a blank/about page)
+    if url and "login" not in url and "signin" not in url and "auth" not in url:
+        if url.startswith("http") and url != bank.login_url:
+            return True
+    return False
 
 
 def main() -> None:
@@ -123,7 +130,7 @@ def main() -> None:
             submit_btn.click()
             page.wait_for_timeout(3000)
 
-            url = page.url()
+            url = page.url
             if not _is_logged_in(url, bank):
                 print("\n2FA may be required.")
                 print(f"Current URL: {url}")
@@ -196,19 +203,38 @@ def main() -> None:
                             submit_2fa.click()
                             page.wait_for_timeout(5000)
                     except Exception:
-                        print(f"Could not find code input. URL: {page.url()}")
+                        print(f"Could not find code input. URL: {page.url}")
         else:
             print("\nNo credentials found. Please log in manually in the browser.")
             print("The script will wait for you to complete login...")
 
-        # Poll for success
+        # Poll for success — check URL and page title
         print("\nWaiting for login to complete...")
-        for _ in range(120):  # Wait up to 2 minutes
-            if _is_logged_in(page.url(), bank):
+        print("(Will auto-detect when you reach the dashboard)")
+        last_url = ""
+        for _ in range(300):  # Wait up to 5 minutes
+            current_url = page.url
+            if current_url != last_url:
+                print(f"  URL: {current_url}")
+                last_url = current_url
+            if _is_logged_in(current_url, bank):
                 break
+            # Also check if page title suggests logged in
+            try:
+                title = page.title().lower()
+                if any(
+                    kw in title
+                    for kw in ["dashboard", "account", "summary", "home", "welcome"]
+                ):
+                    print(f"  Title indicates login: {page.title()}")
+                    break
+            except Exception:
+                pass
             time.sleep(1)
+        else:
+            print("\nTimed out waiting. Saving session anyway.")
 
-        final_url = page.url()
+        final_url = page.url
         if _is_logged_in(final_url, bank):
             print(f"\n{bank.name} login successful! Session saved to profile.")
         else:

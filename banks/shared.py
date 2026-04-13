@@ -98,7 +98,7 @@ atexit.register(_cleanup_sessions)
 
 def check_logged_in(page: Page, bank: str) -> None:
     """Raise BankSessionExpiredError if the page is on a login screen."""
-    url = page.url()
+    url = page.url
     if "login" in url or "signin" in url:
         raise BankSessionExpiredError(bank)
 

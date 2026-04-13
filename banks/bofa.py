@@ -27,7 +27,7 @@ BOFA_BILLPAY_URL = (
 
 
 def _check_bofa_logged_in(page: Page) -> None:
-    url = page.url()
+    url = page.url
     if "signin" in url or "login" in url or "bankofamerica.com" not in url:
         raise BankSessionExpiredError("bofa")
 
