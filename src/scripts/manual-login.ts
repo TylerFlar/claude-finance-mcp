@@ -13,7 +13,7 @@
  *   npx tsx src/scripts/manual-login.ts sofi
  */
 
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { firefox, type BrowserContext, type Page } from "playwright";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -59,39 +59,15 @@ console.log(`Browser profile: ${profileDir}\n`);
 fs.mkdirSync(sessionDir, { recursive: true });
 fs.mkdirSync(profileDir, { recursive: true });
 
-// Try to find system Chrome/Edge for maximum compatibility with bot detection.
-// Falls back to Playwright's bundled Chromium.
-let executablePath: string | undefined;
-const candidates = [
-  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-];
-for (const p of candidates) {
-  if (fs.existsSync(p)) {
-    executablePath = p;
-    break;
-  }
-}
+// Use Firefox to match the scraper in shared.ts (which uses firefox.launch).
+// This ensures session cookies are compatible between login and scraping.
+console.log("Using Playwright Firefox (matches finance MCP scraper).");
 
-if (executablePath) {
-  console.log(`Using system browser: ${path.basename(executablePath)}`);
-} else {
-  console.log("No system Chrome/Edge found, using Playwright Chromium.");
-}
-
-const context: BrowserContext = await chromium.launchPersistentContext(profileDir, {
+const context: BrowserContext = await firefox.launchPersistentContext(profileDir, {
   headless: false,
-  executablePath,
   viewport: { width: 1280, height: 900 },
   locale: "en-US",
-  args: [
-    "--disable-blink-features=AutomationControlled",
-    "--no-first-run",
-    "--no-default-browser-check",
-  ],
-  ignoreDefaultArgs: ["--enable-automation"],
+  args: ["--disable-webgl"],
 });
 
 const page: Page = context.pages()[0] || await context.newPage();
